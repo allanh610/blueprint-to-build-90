@@ -60,7 +60,7 @@ function SignIn() {
           {mounted && (
             <div className="mt-8 space-y-5">
               <div className="space-y-2"><Label>Role</Label>
-                <Select value={role} onValueChange={(v) => { const r = v as Role; setRole(r); setUser(r === "student" ? students[0].id : staff.find((s) => s.role === r)?.id ?? ""); }}>
+                <Select value={role} onValueChange={(v) => { const r = v as Role; setRole(r); setUser(r === "student" ? students[0]?.id ?? "" : staff.find((s) => s.role === r)?.id ?? ""); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{(Object.keys(ROLE_LABEL) as Role[]).map((r) => <SelectItem key={r} value={r}>{ROLE_LABEL[r]}</SelectItem>)}</SelectContent>
                 </Select>

@@ -85,7 +85,7 @@ function IntakeForm({ dept, onDone }: { dept: DeptId; onDone: () => void }) {
   useEffect(() => setF((p) => ({ ...p, categoryId: cats[0]?.id ?? "" })), [dept]); // eslint-disable-line
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!f.summary.trim() || !f.contact.trim() || !f.categoryId) return toast.error("Please complete every field.");
+    if (!f.summary.trim() || !f.contact.trim() || !f.categoryId) { toast.error("Please complete every field."); return; }
     try { const t = actions.joinQueue(f); toast.success(`You're in line — case ${t?.caseNo}`); onDone(); }
     catch (err) { toast.error((err as Error).message); }
   };
@@ -148,7 +148,7 @@ function LiveTracker({ ticket }: { ticket: Ticket }) {
           {ticket.status === "waiting" && <p className="mt-1 opacity-80">Estimated wait: {est === null ? "waiting for an advisor to come online" : `about ${est} min`} · updates live</p>}
           <p className="mt-1 text-sm opacity-70">Case {ticket.caseNo} · joined {new Date(ticket.joinedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>
           <div className="mt-5 flex gap-2">
-            {steps.map((st) => <span key={st} className={`rounded-full px-3 py-1 text-xs font-semibold ${ticket.status === st ? "bg-accent text-accent-foreground" : "bg-sidebar-accent opacity-70"}`}>{st === "in_progress" ? "In progress" : st[0].toUpperCase() + st.slice(1)}</span>)}
+            {steps.map((st) => <span key={st} className={`rounded-full px-3 py-1 text-xs font-semibold ${ticket.status === st ? "bg-accent text-accent-foreground" : "bg-sidebar-accent opacity-70"}`}>{st === "in_progress" ? "In progress" : st.charAt(0).toUpperCase() + st.slice(1)}</span>)}
           </div>
         </div>
         {ticket.status === "waiting" && <Button variant="secondary" onClick={() => { actions.leaveQueue(ticket.id); toast("You left the queue."); }}>Leave queue</Button>}

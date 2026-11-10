@@ -16,7 +16,7 @@ export interface Ticket {
   joinedAt: number; calledAt?: number; startedAt?: number; endedAt?: number;
   notes: string; actions: string; nextSteps: string; resolved?: boolean;
 }
-export interface LogEvent { id: string; at: number; type: string; ticketId?: string; actor: string; detail: string }
+export interface LogEvent { id: string; at: number; type: string; ticketId?: string | undefined; actor: string; detail: string }
 export interface Notice { id: string; at: number; to: string; channel: "push" | "sms" | "email"; title: string; body: string; read: boolean }
 export interface Service { id: string; name: string; status: "up" | "down"; since: number; downtimeMin: number }
 export interface Session { role: Role; userId: string; name: string }
@@ -60,8 +60,8 @@ export function estimateWait(ahead: number, advisors: number, avgHandleMin: numb
 export function isOpen(d: Department, at: Date) {
   if (!d.days.includes(at.getDay())) return false;
   const hm = at.getHours() * 60 + at.getMinutes();
-  const [oh, om] = d.open.split(":").map(Number);
-  const [ch, cm] = d.close.split(":").map(Number);
+  const [oh = 0, om = 0] = d.open.split(":").map(Number);
+  const [ch = 0, cm = 0] = d.close.split(":").map(Number);
   return hm >= oh * 60 + om && hm < ch * 60 + cm;
 }
 
@@ -126,18 +126,18 @@ export function seed(now = Date.now()): State {
     if (day.getDay() === 0 || day.getDay() === 6) continue;
     const count = 8 + Math.floor(r() * 14) + (day.getDay() === 1 ? 8 : 0);
     for (let i = 0; i < count; i++) {
-      const cat = categories[Math.floor(r() * categories.length)];
+      const cat = categories[Math.floor(r() * categories.length)]!;
       const hourW = [9, 10, 10, 11, 11, 11, 12, 13, 14, 14, 15, 16];
-      day.setHours(hourW[Math.floor(r() * hourW.length)], Math.floor(r() * 60), 0, 0);
+      day.setHours(hourW[Math.floor(r() * hourW.length)]!, Math.floor(r() * 60), 0, 0);
       const joined = day.getTime();
       const wait = (5 + r() * (cat.dept === "finaid" ? 110 : 60)) * 60000;
       const handle = (5 + r() * 18) * 60000;
-      const stu = students[Math.floor(r() * students.length)];
+      const stu = students[Math.floor(r() * students.length)]!;
       const id = `T${n++}`;
       const t: Ticket = {
         id, caseNo: `HH-${String(n).padStart(6, "0")}`, studentId: stu.id, studentName: stu.name, contact: stu.email,
         dept: cat.dept, categoryId: cat.id, summary: `${cat.name} inquiry`, mode: r() > 0.45 ? "virtual" : "in_person",
-        status: "done", advisorId: advisorsByDept[cat.dept][Math.floor(r() * 2)], joinedAt: joined,
+        status: "done", advisorId: advisorsByDept[cat.dept][Math.floor(r() * 2)] ?? null, joinedAt: joined,
         calledAt: joined + wait, startedAt: joined + wait + 60000, endedAt: joined + wait + 60000 + handle,
         notes: "Reviewed account with student.", actions: "Updated record.", nextSteps: r() > 0.7 ? "Upload signed form to portal" : "", resolved: r() > 0.32,
       };

@@ -67,7 +67,7 @@ export function AppShell({ area, children }: { area: Parameters<typeof canAccess
 }
 
 function NotificationBell({ userId }: { userId: string }) {
-  const notices = useStore((s) => s.notices.filter((n) => n.to === userId));
+  const notices = useStore((s) => s.notices).filter((n) => n.to === userId);
   const unread = notices.filter((n) => !n.read).length;
   return (
     <Popover onOpenChange={(o) => !o && unread && actions.readAll(userId)}>

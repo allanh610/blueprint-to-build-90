@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CalendarClock, Clock, FolderOpen, LifeBuoy, Search, Timer, Users } from "lucide-react";
+import { ArrowRight, CalendarClock, Clock, FolderOpen, LifeBuoy, Loader2, Search, Sparkles, Timer, Users } from "lucide-react";
 import { actions, activeAdvisors, ALMOST_THRESHOLD, catName, deptName, estimateWait, getState, isOpen, orderedQueue, useStore, type DeptId, type Ticket } from "@/lib/store";
+import { recommendIntakeCategory } from "@/lib/intake.functions";
+import type { IntakeRecommendation } from "@/lib/intake.shared";
 import { AppShell, Panel, useNow } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +23,8 @@ export const Route = createFileRoute("/student")({
     { name: "description", content: "Check wait times, join the queue, track your position and review your cases." },
     { property: "og:title", content: "My Hub — Herd Helpdesk" },
     { property: "og:description", content: "Join the Bison Solution Hub queue and track your case." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary_large_image" },
   ] }),
   component: () => <AppShell area="student"><StudentHub /></AppShell>,
 });
@@ -28,15 +33,19 @@ function StudentHub() {
   const session = useStore((s) => s.session)!;
   const tickets = useStore((s) => s.tickets);
   const active = tickets.find((t) => t.studentId === session.userId && ["waiting", "called", "in_progress"].includes(t.status));
-  const [chosenDept, setChosenDept] = useState<DeptId | null>(null);
+  const [intake, setIntake] = useState<{ key: number; dept: DeptId; categoryId?: string; summary?: string } | null>(null);
+  useEffect(() => {
+    if (intake) document.getElementById("check-in")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [intake]);
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-4xl font-bold">Hi, {session.name.split(" ")[0]}</h1>
         <p className="text-muted-foreground">Registration, financial aid and bursar — in one place.</p>
       </div>
-      {active ? <LiveTracker ticket={active} /> : <WaitEstimator onJoin={setChosenDept} />}
-      {!active && chosenDept && <IntakeForm dept={chosenDept} onDone={() => setChosenDept(null)} />}
+      {!active && <AssistedIntake onUse={(recommendation) => setIntake({ key: Date.now(), ...recommendation })} />}
+      {active ? <LiveTracker ticket={active} /> : <WaitEstimator onJoin={(dept) => setIntake({ key: Date.now(), dept })} />}
+      {!active && intake && <IntakeForm key={intake.key} dept={intake.dept} initialCategoryId={intake.categoryId} initialSummary={intake.summary} onDone={() => setIntake(null)} />}
       <div className="grid gap-6 lg:grid-cols-2">
         <MyCases />
         <Availability />
@@ -77,12 +86,64 @@ function WaitEstimator({ onJoin }: { onJoin: (d: DeptId) => void }) {
   );
 }
 
-function IntakeForm({ dept, onDone }: { dept: DeptId; onDone: () => void }) {
+function AssistedIntake({ onUse }: { onUse: (recommendation: IntakeRecommendation) => void }) {
+  const recommend = useServerFn(recommendIntakeCategory);
+  const [description, setDescription] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [recommendation, setRecommendation] = useState<IntakeRecommendation | null>(null);
+
+  const getRecommendation = async () => {
+    setPending(true);
+    setError("");
+    setRecommendation(null);
+    try {
+      const result = await recommend({ data: { description } });
+      if (result.ok) setRecommendation(result.recommendation);
+      else setError(result.error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "We couldn't get an AI recommendation. You can still check in manually below.");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Panel title="Describe it in your own words" icon={<Sparkles className="h-5 w-5" />} action={<Badge variant="secondary">AI-powered</Badge>}>
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">Tell us what's happening. AI can suggest the right issue category and prepare a short summary for check-in.</p>
+        <div className="space-y-2">
+          <Label htmlFor="help-description">What do you need help with?</Label>
+          <Textarea id="help-description" rows={4} maxLength={1200} value={description} onChange={(e) => { setDescription(e.target.value); setRecommendation(null); setError(""); }} placeholder="e.g. I got an email saying my financial aid can't be finished until I send more tax forms, but I'm not sure what to upload." />
+          <div className="flex justify-between gap-4 text-xs text-muted-foreground"><span>Don't include passwords or full account numbers.</span><span>{description.length}/1,200</span></div>
+        </div>
+        <Button type="button" disabled={pending || description.trim().length < 20} onClick={getRecommendation}>
+          {pending ? <Loader2 className="animate-spin" /> : <Sparkles />}
+          {pending ? "Finding the best category…" : "Recommend a category"}
+        </Button>
+        {error && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error} You can still choose a department and check in below.</p>}
+        {recommendation && (
+          <div className="rounded-lg border bg-muted/40 p-4" aria-live="polite">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recommended category</p>
+            <h3 className="mt-1 text-lg font-bold">{recommendation.categoryName}</h3>
+            <p className="text-sm text-muted-foreground">{deptName(getState(), recommendation.dept)}</p>
+            <p className="mt-3 text-sm"><span className="font-semibold">Check-in summary: </span>{recommendation.summary}</p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button type="button" onClick={() => onUse(recommendation)}>Continue to check-in <ArrowRight /></Button>
+              <span className="text-xs text-muted-foreground">You can edit both suggestions next.</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function IntakeForm({ dept, initialCategoryId, initialSummary = "", onDone }: { dept: DeptId; initialCategoryId: string | undefined; initialSummary: string | undefined; onDone: () => void }) {
   const s = useStore((x) => x);
   const me = s.students.find((x) => x.id === s.session!.userId)!;
   const cats = s.categories.filter((c) => c.dept === dept);
-  const [f, setF] = useState({ studentId: me.id, contact: me.phone, categoryId: cats[0]?.id ?? "", summary: "", mode: "virtual" as Ticket["mode"] });
-  useEffect(() => setF((p) => ({ ...p, categoryId: cats[0]?.id ?? "" })), [dept]); // eslint-disable-line
+  const [f, setF] = useState({ studentId: me.id, contact: me.phone, categoryId: cats.some((c) => c.id === initialCategoryId) ? initialCategoryId! : cats[0]?.id ?? "", summary: initialSummary, mode: "virtual" as Ticket["mode"] });
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!f.summary.trim() || !f.contact.trim() || !f.categoryId) { toast.error("Please complete every field."); return; }
@@ -90,7 +151,8 @@ function IntakeForm({ dept, onDone }: { dept: DeptId; onDone: () => void }) {
     catch (err) { toast.error((err as Error).message); }
   };
   return (
-    <Panel title={`Check in: ${deptName(s, dept)}`} icon={<Users className="h-5 w-5" />} action={<Button variant="ghost" size="sm" onClick={onDone}>Cancel</Button>}>
+    <div id="check-in" className="scroll-mt-6">
+      <Panel title={`Check in: ${deptName(s, dept)}`} icon={<Users className="h-5 w-5" />} action={<Button variant="ghost" size="sm" onClick={onDone}>Cancel</Button>}>
       <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2"><Label>Student ID</Label><Input value={f.studentId} readOnly className="bg-muted" /><p className="text-xs text-muted-foreground">Pre-filled from your Howard account</p></div>
         <div className="space-y-2"><Label>Best contact (phone or email)</Label><Input required value={f.contact} onChange={(e) => setF({ ...f, contact: e.target.value })} /></div>
@@ -107,7 +169,8 @@ function IntakeForm({ dept, onDone }: { dept: DeptId; onDone: () => void }) {
         <div className="space-y-2 md:col-span-2"><Label>Briefly describe what you need</Label><Textarea required maxLength={500} value={f.summary} onChange={(e) => setF({ ...f, summary: e.target.value })} placeholder="e.g. I have a hold blocking registration for spring." /></div>
         <div className="md:col-span-2"><Button type="submit" size="lg">Join the queue</Button></div>
       </form>
-    </Panel>
+      </Panel>
+    </div>
   );
 }
 

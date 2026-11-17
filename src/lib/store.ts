@@ -65,7 +65,7 @@ export function isOpen(d: Department, at: Date) {
   return hm >= oh * 60 + om && hm < ch * 60 + cm;
 }
 
-const ACCESS: Record<string, Role[]> = {
+const ACCESS: Record<"student" | "advisor" | "supervisor" | "admin" | "reports", Role[]> = {
   student: ["student"],
   advisor: ["advisor", "supervisor"],
   supervisor: ["supervisor", "uniadmin"],
